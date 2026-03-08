@@ -804,9 +804,86 @@ $connect.addEventListener('click', async ()=>{
 });
 
 // =========================================================
+// キーボード入力対応
+// =========================================================
+document.addEventListener('keydown', async (e) => {
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+
+  const key = e.key.toLowerCase();
+
+  // Enter -> 送信
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    if(!writer || charCount === 0) return;
+    await serialSendLine('S');
+    return;
+  }
+
+  // Backspace -> リセット
+  if(e.key === 'Backspace'){
+    e.preventDefault();
+    if(!writer || charCount === 0) return;
+    await serialSendLine('R');
+    step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0;
+    buffer=''; charCount=0;
+    updateUI();
+    return;
+  }
+
+  // Escape -> 1ステップ戻る
+  if(e.key === 'Escape'){
+    e.preventDefault();
+    if(step === STEP.EXT){ step=STEP.ALPHA; alphaIdx=0; updateUI(); }
+    else if(step === STEP.FINAL){ step=STEP.EXT; updateUI(); }
+    return;
+  }
+
+  if(key.length !== 1 || key < 'a' || key > 'z') return;
+  e.preventDefault();
+
+  if(step === STEP.ALPHA){
+    const i = ALPHA.indexOf(key);
+    if(i === -1) return;
+    const avail = isVowel(i) || EXT_COUNT[i] > 0;
+    if(!avail) return;
+    await clickS1(i);
+
+  } else if(step === STEP.EXT){
+    let matched = null;
+    for(const row of QWERTY_STEP2){
+      for(const cell of row){
+        if(cell.l === key || cell.l === key+'→'){
+          matched = cell; break;
+        }
+      }
+      if(matched) break;
+    }
+    if(!matched) return;
+
+    const ei  = matched.e;
+    const cnt = EXT_COUNT[alphaIdx];
+
+    if(ei === 'Y'){
+      const avail = cnt > 5 && (KANA[alphaIdx][5]||KANA[alphaIdx][6]||KANA[alphaIdx][7]);
+      if(avail){ step3mode='ya'; step=STEP.FINAL; updateUI(); }
+    } else if(ei !== null && ei !== 'SM'){
+      const avail = ei < cnt && KANA[alphaIdx][ei] !== null;
+      if(avail) await clickS2(ei);
+    }
+
+  } else if(step === STEP.FINAL){
+    const yMap  = {a:5, u:6, o:7};
+    const smMap = {a:0, i:1, u:2, e:3, o:4};
+    const activeMap = step3mode==='ya' ? yMap : smMap;
+    if(!(key in activeMap)) return;
+    if(step3mode === 'ya') await clickS3ya(activeMap[key]);
+    else await clickS3sm(activeMap[key]);
+  }
+});
+
+// =========================================================
 // 初期描画
 // =========================================================
-// btn-modeは不要になったので非表示
 const bm = document.getElementById('btn-mode');
 if(bm) bm.style.display='none';
 
