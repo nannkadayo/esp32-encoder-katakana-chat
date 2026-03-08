@@ -1,0 +1,736 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>カタカナチャット WebSerial</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+JP:wght@400;700&display=swap');
+
+:root {
+  --bg:       #0d0f14;
+  --panel:    #13161e;
+  --border:   #1e2535;
+  --accent:   #00e5ff;
+  --accent2:  #ff6b35;
+  --ok:       #39ff14;
+  --warn:     #ffcc00;
+  --text:     #c8d6e5;
+  --dim:      #4a5568;
+  --mono:     'Share Tech Mono', monospace;
+  --jp:       'Noto Sans JP', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--jp);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 12px 40px;
+  gap: 14px;
+}
+
+/* ── ヘッダ ── */
+header {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+header h1 { font-family: var(--mono); font-size: 1.1rem; color: var(--accent); letter-spacing: 2px; }
+header .sub { font-size: 0.7rem; color: var(--dim); }
+
+/* ── 接続行 ── */
+.connect-row {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#status-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+  transition: background .3s;
+}
+#status-dot.on { background: var(--ok); box-shadow: 0 0 7px var(--ok); }
+#status-text { font-family: var(--mono); font-size: 0.78rem; color: var(--dim); flex: 1; }
+
+.btn {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  padding: 6px 14px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  letter-spacing: 1px;
+  transition: background .15s, color .15s, opacity .15s;
+}
+.btn:disabled { opacity: .3; cursor: default; }
+#btn-connect { color: var(--accent); }
+#btn-connect:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+
+/* ── OLED シミュレータ ── */
+#oled {
+  width: 256px; height: 128px;
+  background: #000;
+  border: 2px solid #1a1a1a;
+  border-radius: 6px;
+  box-shadow: 0 0 18px #00e5ff18, inset 0 0 24px #000b;
+  overflow: hidden;
+  position: relative;
+  font-family: var(--mono);
+  color: var(--accent);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+#oled::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, #00002218 4px);
+  pointer-events: none;
+}
+.ol { height: 14px; display: flex; align-items: center; font-size: 8.5px; white-space: nowrap; overflow: hidden; }
+.ol-div { height: 1px; background: #00e5ff55; margin: 3px 0; }
+.ol-dim { color: #006070; }
+.ol-big { font-family: var(--jp); font-size: 13px; font-weight: 700; }
+.ol-warn { color: var(--accent2); }
+
+/* ── メインパネル群 ── */
+.main { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ── ログ ── */
+#log-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 10px 12px;
+  min-height: 88px;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.le { display: flex; gap: 7px; align-items: baseline; }
+.le-pfx { font-family: var(--mono); font-size: 0.78rem; color: var(--dim); flex-shrink: 0; }
+.le-pfx.s { color: var(--accent); }
+.le-pfx.r { color: var(--accent2); }
+.le-txt { font-family: var(--jp); font-size: 0.88rem; }
+.le.sys .le-pfx { color: var(--dim); }
+.le.sys .le-txt { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); }
+
+/* ── STEP パネル ── */
+#step-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px;
+}
+.step-hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.step-lbl { font-family: var(--mono); font-size: 0.68rem; color: var(--dim); letter-spacing: 2px; }
+.step-dots { display: flex; gap: 5px; }
+.sd { width: 26px; height: 3px; border-radius: 2px; background: var(--border); transition: background .2s; }
+.sd.active { background: var(--accent); }
+.sd.done   { background: var(--ok); }
+.step-name { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); margin-left: auto; }
+
+/* ── キーグリッド ── */
+.kgrid {
+  display: grid;
+  gap: 5px;
+}
+/* STEP1: 26文字を 7列×4行（最終行に空きが出るが整列する） */
+.kgrid.step1 { grid-template-columns: repeat(7, 1fr); }
+/* STEP2/3: 最大10個を均等 → 5列が最大 */
+.kgrid.step2 { grid-template-columns: repeat(5, 1fr); }
+.kgrid.step3 { grid-template-columns: repeat(5, 1fr); }
+
+.key {
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #0d1117;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  transition: border-color .1s, background .1s, transform .08s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+.key:hover:not(.disabled)  { border-color: var(--accent); background: #0a1620; }
+.key:active:not(.disabled) { transform: scale(.92); }
+.key.selected { border-color: var(--accent); background: #001822; box-shadow: 0 0 7px #00e5ff33; }
+.key.disabled { opacity: .22; pointer-events: none; }
+.key .ka { font-family: var(--mono); font-size: 0.62rem; color: var(--dim); line-height: 1; }
+.key .kk { font-family: var(--jp);   font-size: 0.72rem; color: var(--text); line-height: 1.1; }
+.key.selected .ka { color: var(--accent); }
+.key.selected .kk { color: #fff; }
+
+/* ── バッファ表示 ── */
+#buf-row {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#buf-lbl { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); flex-shrink: 0; }
+#buf-txt { flex: 1; font-family: var(--jp); font-size: 1.25rem; letter-spacing: 2px; min-height: 32px; display: flex; align-items: center; }
+#buf-cnt { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); }
+
+/* ── アクション行 ── */
+.action-row { display: flex; gap: 8px; }
+#btn-send {
+  flex: 1;
+  padding: 11px;
+  font-family: var(--jp);
+  font-weight: 700;
+  font-size: .95rem;
+  letter-spacing: 4px;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+#btn-send:hover:not(:disabled)  { opacity: .85; }
+#btn-send:active:not(:disabled) { transform: scale(.98); }
+#btn-send:disabled { background: var(--border); color: var(--dim); cursor: default; }
+#btn-reset { color: var(--warn); padding: 11px 14px; }
+
+/* ── 受信バナー ── */
+#banner {
+  position: fixed;
+  top: 10px; left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  background: var(--accent2);
+  color: #fff;
+  font-family: var(--jp);
+  font-size: .88rem;
+  padding: 9px 22px;
+  border-radius: 40px;
+  box-shadow: 0 4px 20px #0009;
+  transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+  white-space: nowrap;
+  z-index: 99;
+  pointer-events: none;
+}
+#banner.show { transform: translateX(-50%) translateY(0); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📡 KATAKANA CHAT</h1>
+  <span class="sub">Web Serial Interface / Chrome・Edge 専用</span>
+</header>
+
+<!-- 接続 -->
+<div class="connect-row">
+  <div id="status-dot"></div>
+  <span id="status-text">未接続</span>
+  <button class="btn" id="btn-connect">CONNECT</button>
+</div>
+
+<!-- OLED シミュレータ -->
+<div id="oled">
+  <div class="ol"><span class="ol-dim">LOG:</span></div>
+  <div class="ol" id="ol1"></div>
+  <div class="ol" id="ol2"></div>
+  <div class="ol-div"></div>
+  <div class="ol"><span class="ol-dim">IN:&nbsp;</span><span id="ol-buf"></span></div>
+  <div class="ol" style="justify-content:space-between">
+    <span id="ol-cnt" class="ol-dim">0/10</span>
+    <span id="ol-prev" class="ol-big"></span>
+  </div>
+</div>
+
+<!-- メイン -->
+<div class="main">
+
+  <div id="log-box">
+    <div class="le sys"><span class="le-pfx">—</span><span class="le-txt">接続待ち</span></div>
+  </div>
+
+  <div id="step-panel">
+    <div class="step-hdr">
+      <span class="step-lbl">STEP</span>
+      <div class="step-dots">
+        <div class="sd active" id="sd1"></div>
+        <div class="sd"        id="sd2"></div>
+        <div class="sd"        id="sd3"></div>
+      </div>
+      <span class="step-name" id="step-name">ALPHA</span>
+    </div>
+    <div id="key-area"></div>
+  </div>
+
+  <div id="buf-row">
+    <span id="buf-lbl">IN:</span>
+    <div id="buf-txt"></div>
+    <span id="buf-cnt">0/10</span>
+  </div>
+
+  <div class="action-row">
+    <button class="btn" id="btn-reset" disabled>リセット</button>
+    <button id="btn-send" disabled>送　信</button>
+  </div>
+
+</div>
+
+<div id="banner">📨 受信</div>
+
+<script>
+"use strict";
+
+// =========================================================
+// 変換テーブル（ESP32 と完全一致）
+// =========================================================
+const ALPHA = ['a','b','c','d','e','f','g','h','i','j',
+               'k','l','m','n','o','p','q','r','s','t',
+               'u','v','w','x','y','z'];
+
+const EXT_LABEL = ['a','i','u','e','o','ya','yu','yo','small','n'];
+
+const EXT_COUNT = [0,8,8,5,0,5,8,8,0,8,8,8,8,10,0,8,8,8,8,9,0,5,5,1,5,8];
+
+const KANA = [
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // a
+  ['バ','ビ','ブ','ベ','ボ','ビャ','ビュ','ビョ',null,null],     // b
+  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],     // c
+  ['ダ','ヂ','ヅ','デ','ド',null,null,null,null,null],          // d
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // e
+  ['ファ','フィ','フ','フェ','フォ',null,null,null,null,null],  // f
+  ['ガ','ギ','グ','ゲ','ゴ','ギャ','ギュ','ギョ',null,null],     // g
+  ['ハ','ヒ','フ','ヘ','ホ','ヒャ','ヒュ','ヒョ',null,null],     // h
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // i
+  ['ジャ','ジ','ジュ','ジェ','ジョ','ジャ','ジュ','ジョ',null,null], // j
+  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],     // k
+  ['ラ','リ','ル','レ','ロ','リャ','リュ','リョ',null,null],     // l
+  ['マ','ミ','ム','メ','モ','ミャ','ミュ','ミョ',null,null],     // m
+  ['ナ','ニ','ヌ','ネ','ノ','ニャ','ニュ','ニョ',null,'ン'],     // n
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // o
+  ['パ','ピ','プ','ペ','ポ','ピャ','ピュ','ピョ',null,null],     // p
+  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],     // q
+  ['ラ','リ','ル','レ','ロ','リャ','リュ','リョ',null,null],     // r
+  ['サ','シ','ス','セ','ソ','シャ','シュ','ショ',null,null],     // s
+  ['タ','チ','ツ','テ','ト','チャ','チュ','チョ','ッ',null],     // t
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // u
+  ['ヴァ','ヴィ','ヴ','ヴェ','ヴォ',null,null,null,null,null],  // v
+  ['ワ','ウィ','ウ','ウェ','ヲ',null,null,null,null,null],      // w
+  [null,null,null,null,null,null,null,null,'→3',null],          // x
+  ['ヤ','イ','ユ','イェ','ヨ',null,null,null,null,null],        // y
+  ['ザ','ジ','ズ','ゼ','ゾ','ジャ','ジュ','ジョ',null,null],     // z
+];
+
+const SMALL      = ['ァ','ィ','ゥ','ェ','ォ'];
+const SMALL_LBL  = ['a','i','u','e','o'];
+
+// ★ ESP32 と同一順序: a=0, i=8, u=20, e=4, o=14
+const VOWEL_IDX = [0, 8, 20, 4, 14];
+function isVowel(i){ return VOWEL_IDX.includes(i); }
+function vowelKana(i){
+  const map = {0:0, 8:1, 20:2, 4:3, 14:4};
+  return KANA[i][map[i]];
+}
+
+// =========================================================
+// 状態
+// =========================================================
+const STEP = Object.freeze({ ALPHA:0, EXT:1, FINAL:2 });
+let step     = STEP.ALPHA;
+let alphaIdx = 0;
+let extIdx   = 0;
+let finalIdx = 0;
+let buffer   = '';
+let charCount = 0;
+
+// =========================================================
+// シリアル
+// =========================================================
+let port   = null;
+let writer = null;
+let reader = null;
+let lineBuf = '';
+
+async function serialSendLine(str){
+  if (!writer) return;
+  await writer.write(new TextEncoder().encode(str + '\n'));
+}
+
+// =========================================================
+// DOM
+// =========================================================
+const $connect  = document.getElementById('btn-connect');
+const $send     = document.getElementById('btn-send');
+const $reset    = document.getElementById('btn-reset');
+const $sDot     = document.getElementById('status-dot');
+const $sTxt     = document.getElementById('status-text');
+const $logBox   = document.getElementById('log-box');
+const $keyArea  = document.getElementById('key-area');
+const $bufTxt   = document.getElementById('buf-txt');
+const $bufCnt   = document.getElementById('buf-cnt');
+const $banner   = document.getElementById('banner');
+const $ol1      = document.getElementById('ol1');
+const $ol2      = document.getElementById('ol2');
+const $olBuf    = document.getElementById('ol-buf');
+const $olCnt    = document.getElementById('ol-cnt');
+const $olPrev   = document.getElementById('ol-prev');
+const $stepName = document.getElementById('step-name');
+
+// XSS 対策: テキストノードとして設定するヘルパー
+function setText(el, str){ el.textContent = str; }
+
+// =========================================================
+// ログ
+// =========================================================
+let oledLines = [];
+function addLog(cls, pfx, txt){
+  const div = document.createElement('div');
+  div.className = 'le ' + cls;
+  const sp1 = document.createElement('span');
+  sp1.className = 'le-pfx ' + (cls==='send'?'s':cls==='recv'?'r':'');
+  setText(sp1, pfx);
+  const sp2 = document.createElement('span');
+  sp2.className = 'le-txt';
+  setText(sp2, txt);
+  div.appendChild(sp1);
+  div.appendChild(sp2);
+  $logBox.appendChild(div);
+  $logBox.scrollTop = $logBox.scrollHeight;
+
+  if(cls !== 'sys'){
+    oledLines.push((cls==='send'?'<':'>') + txt);
+    if(oledLines.length > 2) oledLines.shift();
+    setText($ol1, oledLines[0] || '');
+    setText($ol2, oledLines[1] || '');
+  }
+}
+
+let bannerTimer;
+function showBanner(txt){
+  setText($banner, '📨 ' + txt);
+  $banner.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(()=> $banner.classList.remove('show'), 2800);
+}
+
+// =========================================================
+// UI 更新
+// =========================================================
+function updateUI(){
+  // バッファ表示
+  setText($bufTxt, buffer);
+  setText($bufCnt, charCount + '/10');
+
+  // OLED シム
+  setText($olBuf, buffer);
+  setText($olCnt, charCount + '/10');
+
+  // プレビュー
+  let prev = '';
+  if      (step === STEP.ALPHA) prev = ALPHA[alphaIdx];
+  else if (step === STEP.EXT)   prev = (alphaIdx===23 && extIdx===8) ? 'sm' : (KANA[alphaIdx][extIdx] || '?');
+  else                           prev = SMALL[finalIdx];
+  setText($olPrev, '[' + prev + ']');
+
+  // ステップドット & 名前
+  const names = ['ALPHA', 'EXT', 'SMALL'];
+  setText($stepName, names[step]);
+  for(let i=1;i<=3;i++){
+    const d = document.getElementById('sd'+i);
+    d.className = 'sd' + (i-1<step?' done': i-1===step?' active':'');
+  }
+
+  // ボタン活性
+  const connected = !!writer;
+  $send.disabled  = charCount === 0 || !connected;
+  $reset.disabled = charCount === 0 || !connected;
+
+  renderKeys();
+}
+
+// =========================================================
+// キー描画
+// =========================================================
+function renderKeys(){
+  $keyArea.innerHTML = '';
+
+  if(step === STEP.ALPHA){
+    const grid = document.createElement('div');
+    grid.className = 'kgrid step1';
+    ALPHA.forEach((ch, i)=>{
+      const cnt  = EXT_COUNT[i];
+      const kana = isVowel(i) ? vowelKana(i) : (cnt>0 ? KANA[i][0] : null);
+      // 操作不能（extCount=0 かつ 非母音）は disabled
+      const dis  = (!isVowel(i) && cnt===0);
+      grid.appendChild(makeKey(ch, kana, i===alphaIdx && step===STEP.ALPHA, dis, ()=> clickAlpha(i)));
+    });
+    // 余りマス（26 % 7 = 5 → 2個の空きが埋まる）
+    const rem = 7 - (26 % 7);
+    if(rem < 7){ for(let i=0;i<rem;i++){ const e=document.createElement('div'); grid.appendChild(e); } }
+    $keyArea.appendChild(grid);
+
+  } else if(step === STEP.EXT){
+    const cnt  = EXT_COUNT[alphaIdx];
+    const grid = document.createElement('div');
+    grid.className = 'kgrid step2';
+    for(let i=0;i<cnt;i++){
+      const kana = (alphaIdx===23 && i===8) ? 'sm→' : KANA[alphaIdx][i];
+      grid.appendChild(makeKey(EXT_LABEL[i], kana, i===extIdx, kana===null, ()=> clickExt(i)));
+    }
+    $keyArea.appendChild(grid);
+
+  } else {
+    const grid = document.createElement('div');
+    grid.className = 'kgrid step3';
+    SMALL.forEach((kana,i)=>{
+      grid.appendChild(makeKey(SMALL_LBL[i], kana, i===finalIdx, false, ()=> clickFinal(i)));
+    });
+    $keyArea.appendChild(grid);
+  }
+}
+
+function makeKey(top, mid, selected, disabled, onClick){
+  const k = document.createElement('div');
+  k.className = 'key' + (selected?' selected':'') + (disabled?' disabled':'');
+  const t = document.createElement('span'); t.className = 'ka'; setText(t, top || '');
+  const m = document.createElement('span'); m.className = 'kk'; setText(m, mid || '');
+  k.appendChild(t);
+  k.appendChild(m);
+  if(!disabled) k.addEventListener('click', onClick);
+  return k;
+}
+
+// =========================================================
+// クリックハンドラ
+// ─ 重要: Web側はキーを「選択してからE送信」の2段階
+//   extIdx / finalIdx は X コマンドで ESP に先に送り、その後 E
+// =========================================================
+async function clickAlpha(i){
+  if(!writer) return;
+  alphaIdx = i;
+  step = STEP.ALPHA;
+  extIdx = 0; finalIdx = 0;
+
+  // 1) アルファ設定
+  await serialSendLine(ALPHA[i]);
+
+  if(isVowel(i)){
+    // 母音: そのまま E で即確定
+    await serialSendLine('E');
+    // STATE 応答でバッファ更新
+  } else if(EXT_COUNT[i] > 0){
+    // 子音: E でSTEP2へ遷移
+    await serialSendLine('E');
+    step = STEP.EXT;
+    extIdx = 0;
+  }
+  // EXT_COUNT=0 かつ 非母音は disabled なので来ない
+  updateUI();
+}
+
+async function clickExt(i){
+  if(!writer) return;
+  extIdx = i;
+
+  // 1) extIndex を X コマンドで ESP に送る
+  await serialSendLine('X' + i);
+  // 2) 確定
+  await serialSendLine('E');
+
+  if(alphaIdx === 23 && i === 8){
+    step = STEP.FINAL;
+    finalIdx = 0;
+  } else {
+    step = STEP.ALPHA;
+    alphaIdx = 0; extIdx = 0;
+  }
+  updateUI();
+}
+
+async function clickFinal(i){
+  if(!writer) return;
+  finalIdx = i;
+  await serialSendLine('F' + i);
+  await serialSendLine('E');
+  step = STEP.ALPHA;
+  alphaIdx = 0; extIdx = 0; finalIdx = 0;
+  updateUI();
+}
+
+// =========================================================
+// 送信 / リセット
+// =========================================================
+$send.addEventListener('click', async ()=>{
+  if(!writer) return;
+  await serialSendLine('S');
+  // MSG:< を受けてログ & バッファクリア
+});
+
+$reset.addEventListener('click', async ()=>{
+  if(!writer) return;
+  await serialSendLine('R');
+  step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0;
+  buffer=''; charCount=0;
+  updateUI();
+});
+
+// =========================================================
+// ESP32 応答パーサ
+// =========================================================
+function parseLine(line){
+  line = line.trim();
+  if(!line) return;
+
+  if(line === 'READY'){
+    addLog('sys','—','ESP32 接続完了 ✓');
+    return;
+  }
+  if(line === 'OK') return;   // 個別OK は STATE で同期
+  if(line === 'INVALID'){
+    addLog('sys','⚠','無効な操作');
+    return;
+  }
+
+  // STATE:mode|alpha|ext|final|buf|charCount
+  if(line.startsWith('STATE:')){
+    const parts = line.slice(6).split('|');
+    if(parts.length >= 6){
+      step      = parseInt(parts[0]);
+      alphaIdx  = parseInt(parts[1]);
+      extIdx    = parseInt(parts[2]);
+      finalIdx  = parseInt(parts[3]);
+      buffer    = parts[4];
+      charCount = parseInt(parts[5]);
+      updateUI();
+    }
+    return;
+  }
+
+  if(line.startsWith('MSG:<')){
+    const txt = line.slice(5);
+    addLog('send','<', txt);
+    buffer=''; charCount=0;
+    step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0;
+    updateUI();
+    return;
+  }
+  if(line.startsWith('MSG:>')){
+    const txt = line.slice(5);
+    addLog('recv','>', txt);
+    showBanner(txt);
+    return;
+  }
+  if(line.startsWith('My MAC:')){
+    addLog('sys','—','MAC: ' + line.slice(7).trim());
+    return;
+  }
+  addLog('sys','—', line);
+}
+
+// =========================================================
+// シリアル読み取りループ
+// =========================================================
+async function readLoop(){
+  // pipeThrough で変換してから getReader する（pipeTo + getReader は NG）
+  const ds = new TextDecoderStream();
+  reader = port.readable.pipeThrough(ds).getReader();
+  lineBuf = '';
+  try {
+    while(true){
+      const { value, done } = await reader.read();
+      if(done) break;
+      lineBuf += value;
+      let nl;
+      while((nl = lineBuf.indexOf('\n')) !== -1){
+        parseLine(lineBuf.slice(0, nl));
+        lineBuf = lineBuf.slice(nl + 1);
+      }
+    }
+  } catch(e){
+    addLog('sys','⚠','受信エラー: ' + e.message);
+  }
+}
+
+// =========================================================
+// 接続 / 切断
+// =========================================================
+$connect.addEventListener('click', async ()=>{
+  if(port){
+    // ── 切断 ──
+    try {
+      if(reader){ await reader.cancel(); reader = null; }
+      if(writer){ writer.releaseLock(); writer = null; }
+      // readable が pipeThroughで消費されているので close は try で包む
+      try { await port.close(); } catch(_){}
+    } catch(e){ /* ignore */ }
+    port = null;
+    $sDot.className     = 'status-dot';
+    setText($sTxt, '切断しました');
+    $connect.textContent = 'CONNECT';
+    $send.disabled  = true;
+    $reset.disabled = true;
+    return;
+  }
+
+  if(!('serial' in navigator)){
+    addLog('sys','⚠','このブラウザは Web Serial 非対応です（Chrome/Edge を使用してください）');
+    return;
+  }
+
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+
+    // ライター取得
+    writer = port.writable.getWriter();
+
+    $sDot.className      = 'status-dot on';
+    setText($sTxt, '接続中 — 115200 baud');
+    $connect.textContent  = 'DISCONNECT';
+    addLog('sys','—','シリアルポート接続 ✓');
+
+    readLoop();
+    updateUI();
+  } catch(e){
+    addLog('sys','⚠','接続失敗: ' + e.message);
+  }
+});
+
+// =========================================================
+// 初期描画
+// =========================================================
+updateUI();
+</script>
+</body>
+</html>
