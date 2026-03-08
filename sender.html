@@ -301,6 +301,7 @@ header .sub { font-size: 0.7rem; color: var(--dim); }
   </div>
 
   <div class="action-row">
+    <button class="btn" id="btn-mode">JP あ〜ん</button>
     <button class="btn" id="btn-reset" disabled>リセット</button>
     <button id="btn-send" disabled>送　信</button>
   </div>
@@ -320,70 +321,109 @@ const ALPHA = ['a','b','c','d','e','f','g','h','i','j',
                'u','v','w','x','y','z'];
 
 const EXT_LABEL = ['a','i','u','e','o','ya','yu','yo','small','n'];
-
-const EXT_COUNT = [0,8,8,5,0,5,8,8,0,8,8,8,8,10,0,8,8,8,8,9,0,5,5,1,5,8];
+const EXT_COUNT = [0,8,8,5,0,5,8,8,0,8,8,8,8,10,0,8,8,8,9,9,0,5,5,1,5,8];
 
 const KANA = [
-  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // a
-  ['バ','ビ','ブ','ベ','ボ','ビャ','ビュ','ビョ',null,null],     // b
-  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],     // c
-  ['ダ','ヂ','ヅ','デ','ド',null,null,null,null,null],          // d
-  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // e
-  ['ファ','フィ','フ','フェ','フォ',null,null,null,null,null],  // f
-  ['ガ','ギ','グ','ゲ','ゴ','ギャ','ギュ','ギョ',null,null],     // g
-  ['ハ','ヒ','フ','ヘ','ホ','ヒャ','ヒュ','ヒョ',null,null],     // h
-  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // i
-  ['ジャ','ジ','ジュ','ジェ','ジョ','ジャ','ジュ','ジョ',null,null], // j
-  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],     // k
-  ['ラ','リ','ル','レ','ロ','リャ','リュ','リョ',null,null],     // l
-  ['マ','ミ','ム','メ','モ','ミャ','ミュ','ミョ',null,null],     // m
-  ['ナ','ニ','ヌ','ネ','ノ','ニャ','ニュ','ニョ',null,'ン'],     // n
-  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // o
-  ['パ','ピ','プ','ペ','ポ','ピャ','ピュ','ピョ',null,null],     // p
-  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],     // q
-  ['ラ','リ','ル','レ','ロ','リャ','リュ','リョ',null,null],     // r
-  ['サ','シ','ス','セ','ソ','シャ','シュ','ショ',null,null],     // s
-  ['タ','チ','ツ','テ','ト','チャ','チュ','チョ','ッ',null],     // t
-  ['ア','イ','ウ','エ','オ',null,null,null,null,null],          // u
-  ['ヴァ','ヴィ','ヴ','ヴェ','ヴォ',null,null,null,null,null],  // v
-  ['ワ','ウィ','ウ','ウェ','ヲ',null,null,null,null,null],      // w
-  [null,null,null,null,null,null,null,null,'→3',null],          // x
-  ['ヤ','イ','ユ','イェ','ヨ',null,null,null,null,null],        // y
-  ['ザ','ジ','ズ','ゼ','ゾ','ジャ','ジュ','ジョ',null,null],     // z
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],
+  ['バ','ビ','ブ','ベ','ボ','ビャ','ビュ','ビョ',null,null],
+  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],
+  ['ダ','ヂ','ヅ','デ','ド',null,null,null,null,null],
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],
+  ['ファ','フィ','フ','フェ','フォ',null,null,null,null,null],
+  ['ガ','ギ','グ','ゲ','ゴ','ギャ','ギュ','ギョ',null,null],
+  ['ハ','ヒ','フ','ヘ','ホ','ヒャ','ヒュ','ヒョ',null,null],
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],
+  ['ジャ','ジ','ジュ','ジェ','ジョ','ジャ','ジュ','ジョ',null,null],
+  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],
+  ['ラ','リ','ル','レ','ロ','リャ','リュ','リョ',null,null],
+  ['マ','ミ','ム','メ','モ','ミャ','ミュ','ミョ',null,null],
+  ['ナ','ニ','ヌ','ネ','ノ','ニャ','ニュ','ニョ',null,'ン'],
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],
+  ['パ','ピ','プ','ペ','ポ','ピャ','ピュ','ピョ',null,null],
+  ['カ','キ','ク','ケ','コ','キャ','キュ','キョ',null,null],
+  ['ラ','リ','ル','レ','ロ','リャ','リュ','リョ',null,null],
+  ['サ','シ','ス','セ','ソ','シャ','シュ','ショ',null,null],
+  ['タ','チ','ツ','テ','ト','チャ','チュ','チョ','ッ',null],
+  ['ア','イ','ウ','エ','オ',null,null,null,null,null],
+  ['ヴァ','ヴィ','ヴ','ヴェ','ヴォ',null,null,null,null,null],
+  ['ワ','ウィ','ウ','ウェ','ヲ',null,null,null,null,null],
+  [null,null,null,null,null,null,null,null,'→sm',null],
+  ['ヤ','イ','ユ','イェ','ヨ',null,null,null,null,null],
+  ['ザ','ジ','ズ','ゼ','ゾ','ジャ','ジュ','ジョ',null,null],
 ];
 
-const SMALL      = ['ァ','ィ','ゥ','ェ','ォ'];
-const SMALL_LBL  = ['a','i','u','e','o'];
+const SMALL     = ['ァ','ィ','ゥ','ェ','ォ'];
+const SMALL_LBL = ['a','i','u','e','o'];
 
-// ★ ESP32 と同一順序: a=0, i=8, u=20, e=4, o=14
-const VOWEL_IDX = [0, 8, 20, 4, 14];
+// ESP32 と同一順序: a=0,i=8,u=20,e=4,o=14
+const VOWEL_IDX = [0,8,20,4,14];
 function isVowel(i){ return VOWEL_IDX.includes(i); }
-function vowelKana(i){
-  const map = {0:0, 8:1, 20:2, 4:3, 14:4};
-  return KANA[i][map[i]];
-}
+function vowelKana(i){ const m={0:0,8:1,20:2,4:3,14:4}; return KANA[i][m[i]]; }
 
 // =========================================================
-// 状態
+// QWERTY 定義
 // =========================================================
-const STEP = Object.freeze({ ALPHA:0, EXT:1, FINAL:2 });
-let step     = STEP.ALPHA;
-let alphaIdx = 0;
-let extIdx   = 0;
-let finalIdx = 0;
-let buffer   = '';
+// STEP1 / STEP2 / STEP3 共通の3行構造
+// 各セルは { label, role } で role は以下:
+//   STEP1: 'alpha'  → ALPHA文字  (labelがアルファベット)
+//   STEP2: 'ext'    → EXT_INDEX  (label='a'/'i'/... or 'ya'/'yu'/'yo'/'sm'/'n')
+//          'y_gate' → yキー（押すとSTEP3へ進む）
+//          'sm_gate'→ smキー（押すとSTEP3小文字モードへ）
+//   STEP3: 'final'  → SMALL index (label='a'/'u'/'o' のみ有効)
+
+// STEP2 の各キーに「どのextIdxに対応するか」を定義
+//   extIdx=null → その行では使えないキー（暗く表示）
+//   extIdx='Y'  → yキー（STEP3=拗音モードへ進む）
+//   extIdx='SM' → smキー（STEP3=小文字モードへ進む）
+const QWERTY_STEP2 = [
+  // row1: q  w  e  r  t  [ya/Y]  u  i  o  p
+  [ {l:'q',e:null}, {l:'w',e:null}, {l:'e',e:3},  {l:'r',e:null}, {l:'t',e:null},
+    {l:'y→',e:'Y'}, {l:'u',e:2},    {l:'i',e:1},  {l:'o',e:4},    {l:'p',e:null} ],
+  // row2: a  s  d  f  g  h  j  k  l  [n]
+  [ {l:'a',e:0},    {l:'s',e:null}, {l:'d',e:null},{l:'f',e:null}, {l:'g',e:null},
+    {l:'h',e:null}, {l:'j',e:null}, {l:'k',e:null},{l:'l',e:null}, {l:'n',e:9} ],
+  // row3: z  x  c  v  b  [sm]  m
+  [ {l:'z',e:null}, {l:'x',e:null}, {l:'c',e:null},{l:'v',e:null}, {l:'b',e:null},
+    {l:'sm→',e:'SM'},{l:'m',e:null} ],
+];
+
+// STEP3拗音: y→a=ya(5), y→u=yu(6), y→o=yo(7)
+// STEP3小文字: sm→a=ァ(0), sm→i=ィ(1), sm→u=ゥ(2), sm→e=ェ(3), sm→o=ォ(4)
+const QWERTY_STEP3 = [
+  [ {l:'q',e:null},{l:'w',e:null},{l:'e',e:'e'},{l:'r',e:null},{l:'t',e:null},
+    {l:'y',e:null},{l:'u',e:'u'}, {l:'i',e:'i'},{l:'o',e:'o'}, {l:'p',e:null} ],
+  [ {l:'a',e:'a'}, {l:'s',e:null},{l:'d',e:null},{l:'f',e:null},{l:'g',e:null},
+    {l:'h',e:null},{l:'j',e:null},{l:'k',e:null},{l:'l',e:null},{l:'n',e:null} ],
+  [ {l:'z',e:null},{l:'x',e:null},{l:'c',e:null},{l:'v',e:null},{l:'b',e:null},
+    {l:'m',e:null} ],
+];
+
+// STEP3 でどの母音キーが有効かはモードによる
+// mode='ya': a/u/o のみ有効 → ya/yu/yo
+// mode='sm': a/i/u/e/o 全部有効 → ァィゥェォ
+let step3mode = 'ya'; // 'ya' or 'sm'
+
+// =========================================================
+// 入力状態
+// =========================================================
+const STEP = Object.freeze({ALPHA:0, EXT:1, FINAL:2});
+let step      = STEP.ALPHA;
+let alphaIdx  = 0;
+let extIdx    = 0;
+let finalIdx  = 0;
+let buffer    = '';
 let charCount = 0;
 
 // =========================================================
 // シリアル
 // =========================================================
-let port   = null;
-let writer = null;
-let reader = null;
+let port    = null;
+let writer  = null;
+let reader  = null;
 let lineBuf = '';
 
 async function serialSendLine(str){
-  if (!writer) return;
+  if(!writer) return;
   await writer.write(new TextEncoder().encode(str + '\n'));
 }
 
@@ -407,7 +447,6 @@ const $olCnt    = document.getElementById('ol-cnt');
 const $olPrev   = document.getElementById('ol-prev');
 const $stepName = document.getElementById('step-name');
 
-// XSS 対策: テキストノードとして設定するヘルパー
 function setText(el, str){ el.textContent = str; }
 
 // =========================================================
@@ -423,11 +462,9 @@ function addLog(cls, pfx, txt){
   const sp2 = document.createElement('span');
   sp2.className = 'le-txt';
   setText(sp2, txt);
-  div.appendChild(sp1);
-  div.appendChild(sp2);
+  div.appendChild(sp1); div.appendChild(sp2);
   $logBox.appendChild(div);
   $logBox.scrollTop = $logBox.scrollHeight;
-
   if(cls !== 'sys'){
     oledLines.push((cls==='send'?'<':'>') + txt);
     if(oledLines.length > 2) oledLines.shift();
@@ -448,30 +485,24 @@ function showBanner(txt){
 // UI 更新
 // =========================================================
 function updateUI(){
-  // バッファ表示
   setText($bufTxt, buffer);
   setText($bufCnt, charCount + '/10');
-
-  // OLED シム
   setText($olBuf, buffer);
   setText($olCnt, charCount + '/10');
 
-  // プレビュー
   let prev = '';
-  if      (step === STEP.ALPHA) prev = ALPHA[alphaIdx];
-  else if (step === STEP.EXT)   prev = (alphaIdx===23 && extIdx===8) ? 'sm' : (KANA[alphaIdx][extIdx] || '?');
-  else                           prev = SMALL[finalIdx];
+  if     (step===STEP.ALPHA) prev = ALPHA[alphaIdx];
+  else if(step===STEP.EXT)   prev = KANA[alphaIdx][extIdx] || '?';
+  else                        prev = SMALL[finalIdx];
   setText($olPrev, '[' + prev + ']');
 
-  // ステップドット & 名前
-  const names = ['ALPHA', 'EXT', 'SMALL'];
-  setText($stepName, names[step]);
+  const stepNames = ['STEP1','STEP2','STEP3'];
+  setText($stepName, stepNames[step]);
   for(let i=1;i<=3;i++){
     const d = document.getElementById('sd'+i);
     d.className = 'sd' + (i-1<step?' done': i-1===step?' active':'');
   }
 
-  // ボタン活性
   const connected = !!writer;
   $send.disabled  = charCount === 0 || !connected;
   $reset.disabled = charCount === 0 || !connected;
@@ -480,112 +511,198 @@ function updateUI(){
 }
 
 // =========================================================
-// キー描画
+// キー描画（QWERTY 3ステップ）
 // =========================================================
 function renderKeys(){
   $keyArea.innerHTML = '';
-
-  if(step === STEP.ALPHA){
-    const grid = document.createElement('div');
-    grid.className = 'kgrid step1';
-    ALPHA.forEach((ch, i)=>{
-      const cnt  = EXT_COUNT[i];
-      const kana = isVowel(i) ? vowelKana(i) : (cnt>0 ? KANA[i][0] : null);
-      // 操作不能（extCount=0 かつ 非母音）は disabled
-      const dis  = (!isVowel(i) && cnt===0);
-      grid.appendChild(makeKey(ch, kana, i===alphaIdx && step===STEP.ALPHA, dis, ()=> clickAlpha(i)));
-    });
-    // 余りマス（26 % 7 = 5 → 2個の空きが埋まる）
-    const rem = 7 - (26 % 7);
-    if(rem < 7){ for(let i=0;i<rem;i++){ const e=document.createElement('div'); grid.appendChild(e); } }
-    $keyArea.appendChild(grid);
-
-  } else if(step === STEP.EXT){
-    const cnt  = EXT_COUNT[alphaIdx];
-    const grid = document.createElement('div');
-    grid.className = 'kgrid step2';
-    for(let i=0;i<cnt;i++){
-      const kana = (alphaIdx===23 && i===8) ? 'sm→' : KANA[alphaIdx][i];
-      grid.appendChild(makeKey(EXT_LABEL[i], kana, i===extIdx, kana===null, ()=> clickExt(i)));
-    }
-    $keyArea.appendChild(grid);
-
-  } else {
-    const grid = document.createElement('div');
-    grid.className = 'kgrid step3';
-    SMALL.forEach((kana,i)=>{
-      grid.appendChild(makeKey(SMALL_LBL[i], kana, i===finalIdx, false, ()=> clickFinal(i)));
-    });
-    $keyArea.appendChild(grid);
-  }
+  if     (step === STEP.ALPHA) renderSTEP1();
+  else if(step === STEP.EXT)   renderSTEP2();
+  else                          renderSTEP3();
 }
 
-function makeKey(top, mid, selected, disabled, onClick){
-  const k = document.createElement('div');
-  k.className = 'key' + (selected?' selected':'') + (disabled?' disabled':'');
-  const t = document.createElement('span'); t.className = 'ka'; setText(t, top || '');
-  const m = document.createElement('span'); m.className = 'kk'; setText(m, mid || '');
-  k.appendChild(t);
-  k.appendChild(m);
-  if(!disabled) k.addEventListener('click', onClick);
-  return k;
+// ── STEP1: 子音/母音選択 ──
+function renderSTEP1(){
+  const ROWS = [
+    {keys:['q','w','e','r','t','y','u','i','o','p'], pad:0},
+    {keys:['a','s','d','f','g','h','j','k','l'],     pad:0.5},
+    {keys:['z','x','c','v','b','n','m'],             pad:1.25},
+  ];
+  ROWS.forEach(row => {
+    const rowDiv = mkRow();
+    if(row.pad){ rowDiv.appendChild(mkSpacer(row.pad)); }
+    row.keys.forEach(ch => {
+      const i    = ALPHA.indexOf(ch);
+      const cnt  = EXT_COUNT[i];
+      const kana = isVowel(i) ? vowelKana(i) : (cnt>0 ? KANA[i][0] : null);
+      const avail = isVowel(i) || cnt > 0;
+      const k = mkKey(ch, kana || '', i===alphaIdx, !avail, avail ? ()=>clickS1(i) : null);
+      k.style.flex = '1';
+      if(!avail) k.style.opacity = '0.18';
+      rowDiv.appendChild(k);
+    });
+    if(row.pad){ rowDiv.appendChild(mkSpacer(row.pad)); }
+    $keyArea.appendChild(rowDiv);
+  });
+}
+
+// ── STEP2: 母音 / y→STEP3 / sm→STEP3 ──
+function renderSTEP2(){
+  QWERTY_STEP2.forEach(row => {
+    const rowDiv = mkRow();
+    row.forEach(cell => {
+      const ei  = cell.e;
+      const cnt = EXT_COUNT[alphaIdx];
+
+      let avail = false;
+      let kana  = '';
+      let onClick = null;
+
+      if(ei === 'Y'){
+        // y→ ゲート: 拗音が1つでも存在する行なら有効
+        avail = cnt > 5 && (KANA[alphaIdx][5]||KANA[alphaIdx][6]||KANA[alphaIdx][7]);
+        kana  = avail ? 'y→' : '';
+        if(avail) onClick = ()=>{ step3mode='ya'; step=STEP.FINAL; updateUI(); };
+      } else if(ei === 'SM'){
+        // sm→ ゲート: alphaIdx===23('x') の場合のみ
+        avail = alphaIdx === 23;
+        kana  = avail ? 'sm→' : '';
+        if(avail) onClick = ()=>{ step3mode='sm'; step=STEP.FINAL; updateUI(); };
+      } else if(ei !== null){
+        avail = ei < cnt && KANA[alphaIdx][ei] !== null;
+        kana  = avail ? KANA[alphaIdx][ei] : '';
+        if(avail) onClick = ()=>clickS2(ei);
+      }
+
+      const k = mkKey(cell.l, kana, false, false, onClick);
+      k.style.flex = '1';
+      if(!avail) k.style.opacity = '0.18';
+      rowDiv.appendChild(k);
+    });
+    $keyArea.appendChild(rowDiv);
+  });
+
+  // STEP2 に「← 戻る」ボタン
+  appendBackBtn(()=>{ step=STEP.ALPHA; alphaIdx=0; updateUI(); });
+}
+
+// ── STEP3: 拗音母音 or 小文字 ──
+function renderSTEP3(){
+  // ya モード: a=ya(5) / u=yu(6) / o=yo(7)
+  // sm モード: a=ァ(0) / i=ィ(1) / u=ゥ(2) / e=ェ(3) / o=ォ(4)
+  const yMap  = {a:5, u:6, o:7};
+  const smMap = {a:0, i:1, u:2, e:3, o:4};
+  const activeMap = step3mode==='ya' ? yMap : smMap;
+
+  QWERTY_STEP3.forEach(row => {
+    const rowDiv = mkRow();
+    row.forEach(cell => {
+      const vowelKey = cell.e; // 'a','i','u','e','o' or null
+      const avail    = vowelKey !== null && vowelKey in activeMap;
+
+      let kana    = '';
+      let onClick = null;
+      if(avail){
+        if(step3mode === 'ya'){
+          kana    = KANA[alphaIdx][activeMap[vowelKey]];
+          onClick = ()=>clickS3ya(activeMap[vowelKey]);
+        } else {
+          kana    = SMALL[activeMap[vowelKey]];
+          onClick = ()=>clickS3sm(activeMap[vowelKey]);
+        }
+      }
+
+      const k = mkKey(cell.l, kana || '', false, false, onClick);
+      k.style.flex = '1';
+      if(!avail) k.style.opacity = '0.18';
+      rowDiv.appendChild(k);
+    });
+    $keyArea.appendChild(rowDiv);
+  });
+
+  appendBackBtn(()=>{ step=STEP.EXT; updateUI(); });
 }
 
 // =========================================================
 // クリックハンドラ
-// ─ 重要: Web側はキーを「選択してからE送信」の2段階
-//   extIdx / finalIdx は X コマンドで ESP に先に送り、その後 E
 // =========================================================
-async function clickAlpha(i){
+async function clickS1(i){
   if(!writer) return;
   alphaIdx = i;
-  step = STEP.ALPHA;
-  extIdx = 0; finalIdx = 0;
-
-  // 1) アルファ設定
   await serialSendLine(ALPHA[i]);
 
   if(isVowel(i)){
-    // 母音: そのまま E で即確定
+    // 母音: 即確定
     await serialSendLine('E');
-    // STATE 応答でバッファ更新
-  } else if(EXT_COUNT[i] > 0){
-    // 子音: E でSTEP2へ遷移
-    await serialSendLine('E');
-    step = STEP.EXT;
-    extIdx = 0;
-  }
-  // EXT_COUNT=0 かつ 非母音は disabled なので来ない
-  updateUI();
-}
-
-async function clickExt(i){
-  if(!writer) return;
-  extIdx = i;
-
-  // 1) extIndex を X コマンドで ESP に送る
-  await serialSendLine('X' + i);
-  // 2) 確定
-  await serialSendLine('E');
-
-  if(alphaIdx === 23 && i === 8){
-    step = STEP.FINAL;
-    finalIdx = 0;
+    step=STEP.ALPHA; alphaIdx=0;
   } else {
-    step = STEP.ALPHA;
-    alphaIdx = 0; extIdx = 0;
+    // 子音: STEP2へ（ESP側でもEでSTEP2へ移行）
+    await serialSendLine('E');
+    step=STEP.EXT; extIdx=0;
   }
   updateUI();
 }
 
-async function clickFinal(i){
+async function clickS2(ei){
   if(!writer) return;
-  finalIdx = i;
-  await serialSendLine('F' + i);
+  extIdx = ei;
+  await serialSendLine('X' + ei);
   await serialSendLine('E');
-  step = STEP.ALPHA;
-  alphaIdx = 0; extIdx = 0; finalIdx = 0;
+  step=STEP.ALPHA; alphaIdx=0; extIdx=0;
   updateUI();
+}
+
+async function clickS3ya(ei){
+  // 拗音: X{ei} + E
+  if(!writer) return;
+  await serialSendLine('X' + ei);
+  await serialSendLine('E');
+  step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0;
+  updateUI();
+}
+
+async function clickS3sm(fi){
+  // 小文字: X8 + E → F{fi} + E
+  if(!writer) return;
+  await serialSendLine('X8');
+  await serialSendLine('E');
+  await serialSendLine('F' + fi);
+  await serialSendLine('E');
+  step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0;
+  updateUI();
+}
+
+// =========================================================
+// DOM ヘルパー
+// =========================================================
+function mkRow(){
+  const d = document.createElement('div');
+  d.style.cssText = 'display:flex;gap:5px;margin-bottom:5px;';
+  return d;
+}
+function mkSpacer(flex){
+  const d = document.createElement('div');
+  d.style.cssText = `flex:${flex};min-width:0;`;
+  return d;
+}
+function mkKey(top, mid, selected, disabled, onClick){
+  const k = document.createElement('div');
+  k.className = 'key' + (selected?' selected':'') + (disabled?' disabled':'');
+  const t = document.createElement('span'); t.className='ka'; setText(t, top||'');
+  const m = document.createElement('span'); m.className='kk'; setText(m, mid||'');
+  k.appendChild(t); k.appendChild(m);
+  if(!disabled && onClick) k.addEventListener('click', onClick);
+  return k;
+}
+function appendBackBtn(onBack){
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-top:4px;';
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.style.cssText = 'color:var(--dim);font-size:.72rem;padding:4px 12px;width:100%;';
+  setText(btn, '← 戻る');
+  btn.addEventListener('click', onBack);
+  wrap.appendChild(btn);
+  $keyArea.appendChild(wrap);
 }
 
 // =========================================================
@@ -594,9 +711,7 @@ async function clickFinal(i){
 $send.addEventListener('click', async ()=>{
   if(!writer) return;
   await serialSendLine('S');
-  // MSG:< を受けてログ & バッファクリア
 });
-
 $reset.addEventListener('click', async ()=>{
   if(!writer) return;
   await serialSendLine('R');
@@ -611,18 +726,10 @@ $reset.addEventListener('click', async ()=>{
 function parseLine(line){
   line = line.trim();
   if(!line) return;
+  if(line==='READY'){ addLog('sys','—','ESP32 接続完了 ✓'); return; }
+  if(line==='OK') return;
+  if(line==='INVALID'){ addLog('sys','⚠','無効な操作'); return; }
 
-  if(line === 'READY'){
-    addLog('sys','—','ESP32 接続完了 ✓');
-    return;
-  }
-  if(line === 'OK') return;   // 個別OK は STATE で同期
-  if(line === 'INVALID'){
-    addLog('sys','⚠','無効な操作');
-    return;
-  }
-
-  // STATE:mode|alpha|ext|final|buf|charCount
   if(line.startsWith('STATE:')){
     const parts = line.slice(6).split('|');
     if(parts.length >= 6){
@@ -636,50 +743,30 @@ function parseLine(line){
     }
     return;
   }
-
-  if(line.startsWith('MSG:<')){
-    const txt = line.slice(5);
-    addLog('send','<', txt);
-    buffer=''; charCount=0;
-    step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0;
-    updateUI();
-    return;
-  }
-  if(line.startsWith('MSG:>')){
-    const txt = line.slice(5);
-    addLog('recv','>', txt);
-    showBanner(txt);
-    return;
-  }
-  if(line.startsWith('My MAC:')){
-    addLog('sys','—','MAC: ' + line.slice(7).trim());
-    return;
-  }
-  addLog('sys','—', line);
+  if(line.startsWith('MSG:<')){ const t=line.slice(5); addLog('send','<',t); buffer=''; charCount=0; step=STEP.ALPHA; alphaIdx=0; extIdx=0; finalIdx=0; updateUI(); return; }
+  if(line.startsWith('MSG:>')){ addLog('recv','>',line.slice(5)); showBanner(line.slice(5)); return; }
+  if(line.startsWith('My MAC:')){ addLog('sys','—','MAC: '+line.slice(7).trim()); return; }
+  addLog('sys','—',line);
 }
 
 // =========================================================
 // シリアル読み取りループ
 // =========================================================
 async function readLoop(){
-  // pipeThrough で変換してから getReader する（pipeTo + getReader は NG）
-  const ds = new TextDecoderStream();
-  reader = port.readable.pipeThrough(ds).getReader();
+  reader = port.readable.pipeThrough(new TextDecoderStream()).getReader();
   lineBuf = '';
   try {
     while(true){
-      const { value, done } = await reader.read();
+      const {value, done} = await reader.read();
       if(done) break;
       lineBuf += value;
       let nl;
       while((nl = lineBuf.indexOf('\n')) !== -1){
         parseLine(lineBuf.slice(0, nl));
-        lineBuf = lineBuf.slice(nl + 1);
+        lineBuf = lineBuf.slice(nl+1);
       }
     }
-  } catch(e){
-    addLog('sys','⚠','受信エラー: ' + e.message);
-  }
+  } catch(e){ addLog('sys','⚠','受信エラー: '+e.message); }
 }
 
 // =========================================================
@@ -687,49 +774,42 @@ async function readLoop(){
 // =========================================================
 $connect.addEventListener('click', async ()=>{
   if(port){
-    // ── 切断 ──
     try {
-      if(reader){ await reader.cancel(); reader = null; }
-      if(writer){ writer.releaseLock(); writer = null; }
-      // readable が pipeThroughで消費されているので close は try で包む
-      try { await port.close(); } catch(_){}
-    } catch(e){ /* ignore */ }
-    port = null;
-    $sDot.className     = 'status-dot';
-    setText($sTxt, '切断しました');
-    $connect.textContent = 'CONNECT';
-    $send.disabled  = true;
-    $reset.disabled = true;
+      if(reader){ await reader.cancel(); reader=null; }
+      if(writer){ writer.releaseLock(); writer=null; }
+      try{ await port.close(); }catch(_){}
+    } catch(e){}
+    port=null;
+    $sDot.className='status-dot';
+    setText($sTxt,'切断しました');
+    $connect.textContent='CONNECT';
+    $send.disabled=true; $reset.disabled=true;
     return;
   }
-
   if(!('serial' in navigator)){
-    addLog('sys','⚠','このブラウザは Web Serial 非対応です（Chrome/Edge を使用してください）');
+    addLog('sys','⚠','Chrome/Edge が必要です');
     return;
   }
-
   try {
     port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 115200 });
-
-    // ライター取得
+    await port.open({baudRate:115200});
     writer = port.writable.getWriter();
-
-    $sDot.className      = 'status-dot on';
-    setText($sTxt, '接続中 — 115200 baud');
-    $connect.textContent  = 'DISCONNECT';
+    $sDot.className='status-dot on';
+    setText($sTxt,'接続中 — 115200 baud');
+    $connect.textContent='DISCONNECT';
     addLog('sys','—','シリアルポート接続 ✓');
-
     readLoop();
     updateUI();
-  } catch(e){
-    addLog('sys','⚠','接続失敗: ' + e.message);
-  }
+  } catch(e){ addLog('sys','⚠','接続失敗: '+e.message); }
 });
 
 // =========================================================
 // 初期描画
 // =========================================================
+// btn-modeは不要になったので非表示
+const bm = document.getElementById('btn-mode');
+if(bm) bm.style.display='none';
+
 updateUI();
 </script>
 </body>
