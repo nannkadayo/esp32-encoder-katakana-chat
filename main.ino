@@ -1,19 +1,26 @@
 /*
- * ESP-NOW カタカナ入力チャット装置 (u8g2版 / v3)
+ * ESP-NOW カタカナ入力チャット装置 (u8g2版 / v3 + WebSerial対応)
  *
- * ─── v3 新機能 ───────────────────────────────────
- *  ★ 隠しモード強化 : 相手の入力画面を「覗き見」
- *    - エンコーダを動かすたびに typing パケットを送信（最小50ms間隔）
- *    - パケットには alphaIndex / extIndex / finalIndex / inputMode を含む
- *    - 受信側が hiddenMode=ON なら相手の選択中文字をリアルタイムプレビュー
+ * ─── WebSerial 追加仕様 ──────────────────────────────
+ *  USBシリアル経由でWebページから操作可能
  *
- * ─── 入力フロー ─────────────────────────────────
- *  STEP1 エンコーダ → a〜z  / Aボタン: 母音→即確定, その他→STEP2
- *  STEP2 エンコーダ → 拡張  / Aボタン: 確定 or x+small→STEP3
- *  STEP3 エンコーダ → 母音  / Aボタン: 小文字確定 (ァィゥェォ)
+ *  シリアルプロトコル（PC → ESP32）:
+ *    'a'〜'z'  → SELECT_ALPHA モードに戻り alphaIndex を設定
+ *    'X'+数字  → SELECT_EXT の extIndex を設定  例: "X2\n"
+ *    'F'+数字  → SELECT_FINAL の finalIndex を設定  例: "F3\n"
+ *    'E'       → Aボタン相当（確定 / 次ステップへ）
+ *    'S'       → Bボタン相当（送信）
+ *    'R'       → リセット（入力バッファクリア）
  *
- *  Bボタン(1回) → 送信
- *  Bボタン(3回/3秒/文字数0) → 隠しモード ON/OFF
+ *  シリアルプロトコル（ESP32 → PC）:
+ *    "STATE:mode|alpha|ext|final|buf|charCount\n"
+ *    "MSG:>テキスト\n"   受信メッセージ
+ *    "MSG:<テキスト\n"   送信メッセージ
+ *    "OK\n"
+ *    "INVALID\n"
+ *    "READY\n"
+ *
+ *  ※ 区切り文字を | にすることで buf 内にカンマが入っても安全
  *
  * ★ peerAddress を相手の MAC に書き換えてください ★
  */
@@ -36,8 +43,8 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(
   U8G2_R0, U8X8_PIN_NONE, SCL_PIN, SDA_PIN
 );
 
-// ===== 相手のMAC
-uint8_t peerAddress[] = {0x1C,0x69,0x20,0x30,0x74,0xBC};
+// ===== 相手のMAC =====
+uint8_t peerAddress[] = {0x88,0x13,0xBF,0x69,0x20,0x90};
 
 // =========================================================
 // 変換テーブル
@@ -58,6 +65,7 @@ const char* const alpha[26] = {
 #define EXT_YO    7
 #define EXT_SMALL 8
 #define EXT_N     9
+
 const char* const extLabel[] = {
   "a","i","u","e","o","ya","yu","yo","small","n"
 };
@@ -67,41 +75,40 @@ const int extCount[26] = {
   0, 5, 5, 1, 5, 8
 };
 const char* const kanaTable[26][10] = {
-/* a */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr},
-/* b */ {"バ","ビ","ブ","ベ","ボ",    "ビャ","ビュ","ビョ",  nullptr},
-/* c */ {"カ","キ","ク","ケ","コ",    "キャ","キュ","キョ",  nullptr},
-/* d */ {"ダ","ヂ","ヅ","デ","ド",    nullptr,nullptr,nullptr,nullptr},
-/* e */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr},
-/* f */ {"ファ","フィ","フ","フェ","フォ",nullptr,nullptr,nullptr,nullptr},
-/* g */ {"ガ","ギ","グ","ゲ","ゴ",    "ギャ","ギュ","ギョ",  nullptr},
-/* h */ {"ハ","ヒ","フ","ヘ","ホ",    "ヒャ","ヒュ","ヒョ",  nullptr},
-/* i */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr},
-/* j */ {"ジャ","ジ","ジュ","ジェ","ジョ","ジャ","ジュ","ジョ",nullptr},
-/* k */ {"カ","キ","ク","ケ","コ",    "キャ","キュ","キョ",  nullptr},
-/* l */ {"ラ","リ","ル","レ","ロ",    "リャ","リュ","リョ",  nullptr},
-/* m */ {"マ","ミ","ム","メ","モ",    "ミャ","ミュ","ミョ",  nullptr},
-/* n */ {"ナ","ニ","ヌ","ネ","ノ","ニャ","ニュ","ニョ",nullptr,"ン"},
-/* o */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr},
-/* p */ {"パ","ピ","プ","ペ","ポ",    "ピャ","ピュ","ピョ",  nullptr},
-/* q */ {"カ","キ","ク","ケ","コ",    "キャ","キュ","キョ",  nullptr},
-/* r */ {"ラ","リ","ル","レ","ロ",    "リャ","リュ","リョ",  nullptr},
-/* s */ {"サ","シ","ス","セ","ソ",    "シャ","シュ","ショ",  nullptr},
-/* t */ {"タ","チ","ツ","テ","ト",    "チャ","チュ","チョ",  "ッ"},
-/* u */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr},
-/* v */ {"ヴァ","ヴィ","ヴ","ヴェ","ヴォ",nullptr,nullptr,nullptr,nullptr},
-/* w */ {"ワ","ウィ","ウ","ウェ","ヲ", nullptr,nullptr,nullptr,nullptr},
-/* x */ {nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,"→STEP3"},
-/* y */ {"ヤ","イ","ユ","イェ","ヨ",  nullptr,nullptr,nullptr,nullptr},
-/* z */ {"ザ","ジ","ズ","ゼ","ゾ",    "ジャ","ジュ","ジョ",  nullptr}
+/* a */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr,nullptr},
+/* b */ {"バ","ビ","ブ","ベ","ボ",    "ビャ","ビュ","ビョ",  nullptr,nullptr},
+/* c */ {"カ","キ","ク","ケ","コ",    "キャ","キュ","キョ",  nullptr,nullptr},
+/* d */ {"ダ","ヂ","ヅ","デ","ド",    nullptr,nullptr,nullptr,nullptr,nullptr},
+/* e */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr,nullptr},
+/* f */ {"ファ","フィ","フ","フェ","フォ",nullptr,nullptr,nullptr,nullptr,nullptr},
+/* g */ {"ガ","ギ","グ","ゲ","ゴ",    "ギャ","ギュ","ギョ",  nullptr,nullptr},
+/* h */ {"ハ","ヒ","フ","ヘ","ホ",    "ヒャ","ヒュ","ヒョ",  nullptr,nullptr},
+/* i */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr,nullptr},
+/* j */ {"ジャ","ジ","ジュ","ジェ","ジョ","ジャ","ジュ","ジョ",nullptr,nullptr},
+/* k */ {"カ","キ","ク","ケ","コ",    "キャ","キュ","キョ",  nullptr,nullptr},
+/* l */ {"ラ","リ","ル","レ","ロ",    "リャ","リュ","リョ",  nullptr,nullptr},
+/* m */ {"マ","ミ","ム","メ","モ",    "ミャ","ミュ","ミョ",  nullptr,nullptr},
+/* n */ {"ナ","ニ","ヌ","ネ","ノ",    "ニャ","ニュ","ニョ",  nullptr,"ン"},
+/* o */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr,nullptr},
+/* p */ {"パ","ピ","プ","ペ","ポ",    "ピャ","ピュ","ピョ",  nullptr,nullptr},
+/* q */ {"カ","キ","ク","ケ","コ",    "キャ","キュ","キョ",  nullptr,nullptr},
+/* r */ {"ラ","リ","ル","レ","ロ",    "リャ","リュ","リョ",  nullptr,nullptr},
+/* s */ {"サ","シ","ス","セ","ソ",    "シャ","シュ","ショ",  nullptr,nullptr},
+/* t */ {"タ","チ","ツ","テ","ト",    "チャ","チュ","チョ",  "ッ",   nullptr},
+/* u */ {"ア","イ","ウ","エ","オ",    nullptr,nullptr,nullptr,nullptr,nullptr},
+/* v */ {"ヴァ","ヴィ","ヴ","ヴェ","ヴォ",nullptr,nullptr,nullptr,nullptr,nullptr},
+/* w */ {"ワ","ウィ","ウ","ウェ","ヲ", nullptr,nullptr,nullptr,nullptr,nullptr},
+/* x */ {nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,"→STEP3",nullptr},
+/* y */ {"ヤ","イ","ユ","イェ","ヨ",  nullptr,nullptr,nullptr,nullptr,nullptr},
+/* z */ {"ザ","ジ","ズ","ゼ","ゾ",    "ジャ","ジュ","ジョ",  nullptr,nullptr}
 };
 const char* const smallTable[5] = {"ァ","ィ","ゥ","ェ","ォ"};
 
 // =========================================================
-// パケット構造体 ★ v3 拡張
+// パケット構造体
 // =========================================================
 #define MSG_BUF_SIZE 94
 
-// InputMode を uint8_t としてパケットで共有するため外部で定義
 enum InputMode : uint8_t {
   SELECT_ALPHA = 0,
   SELECT_EXT   = 1,
@@ -109,12 +116,12 @@ enum InputMode : uint8_t {
 };
 
 typedef struct {
-  char    text[MSG_BUF_SIZE]; // 確定済み文字列（typing=false のとき有効）
-  bool    typing;             // true=入力中プレビュー / false=確定メッセージ
-  uint8_t inputMode;          // SELECT_ALPHA / SELECT_EXT / SELECT_FINAL
-  uint8_t alphaIndex;         // 0-25
-  uint8_t extIndex;           // 0〜extCount[alphaIndex]-1
-  uint8_t finalIndex;         // 0-4 (STEP3)
+  char    text[MSG_BUF_SIZE];
+  bool    typing;
+  uint8_t inputMode;
+  uint8_t alphaIndex;
+  uint8_t extIndex;
+  uint8_t finalIndex;
 } ChatPacket;
 
 ChatPacket txPkt, rxPkt;
@@ -132,63 +139,64 @@ int finalIndex = 0;
 char chatBuffer[MAX_MSG][MSG_BUF_SIZE];
 int  msgCount = 0;
 
-// 受信側: 相手の入力プレビュー情報
-bool    peerIsTyping   = false;
-uint8_t peerInputMode  = SELECT_ALPHA;
-uint8_t peerAlphaIdx   = 0;
-uint8_t peerExtIdx     = 0;
-uint8_t peerFinalIdx   = 0;
+bool    peerIsTyping  = false;
+uint8_t peerInputMode = SELECT_ALPHA;
+uint8_t peerAlphaIdx  = 0;
+uint8_t peerExtIdx    = 0;
+uint8_t peerFinalIdx  = 0;
 
-// 入力バッファ
 char sendBuf[MSG_BUF_SIZE];
 int  sendByteLen   = 0;
 int  sendCharCount = 0;
 
-// エンコーダ
 int  lastEncoded  = 0;
 int  encoderSteps = 0;
 
 volatile bool needRedraw = true;
 
-// デバウンス
 unsigned long lastBtnA = 0;
 unsigned long lastBtnB = 0;
 #define DEBOUNCE_MS 200
 
-// typing preview 送信スロットリング (最小 50ms)
 unsigned long lastPreviewSend = 0;
 #define PREVIEW_INTERVAL_MS 50
 
-// 隠しモード
 bool hiddenMode = false;
 unsigned long bPressHistory[3] = {0, 0, 0};
 #define HIDDEN_WINDOW_MS 3000
 
+// シリアル行バッファ
+char serialLineBuf[32];
+int  serialLineLen = 0;
+
 // =========================================================
 // ユーティリティ
 // =========================================================
+// ESP側の母音インデックス配列（a=0,i=8,u=20,e=4,o=14）
+const int VOWEL_ALPHA_IDX[5] = {0, 8, 20, 4, 14};
+
 bool isVowelAlpha(int idx) {
-  return (idx==0||idx==4||idx==8||idx==14||idx==20);
+  for (int i = 0; i < 5; i++) if (VOWEL_ALPHA_IDX[i] == idx) return true;
+  return false;
 }
-const int VOWEL_ALPHA_IDX[5] = {0,8,20,4,14};
 int alphaToVowelIndex(int idx) {
-  for (int i = 0; i < 5; i++) if (VOWEL_ALPHA_IDX[i]==idx) return i;
+  for (int i = 0; i < 5; i++) if (VOWEL_ALPHA_IDX[i] == idx) return i;
   return 0;
 }
 
-// 現在の選択状態から「プレビュー文字列」を返す（自分 / 相手共用）
 const char* calcPreview(uint8_t mode, uint8_t ai, uint8_t ei, uint8_t fi) {
-  if (mode == SELECT_ALPHA) {
-    return alpha[ai];
-  } else if (mode == SELECT_EXT) {
-    if (ai == 23) return "sm";
-    return kanaTable[ai][ei];
-  } else {
-    return smallTable[fi];
-  }
+  if (mode == SELECT_ALPHA) return alpha[ai];
+  if (mode == SELECT_EXT)   return (ai == 23) ? "sm" : kanaTable[ai][ei];
+  return smallTable[fi];
 }
 
-// typing プレビューパケットを送信（スロットリング付き）
+// STATE を | 区切りでシリアル送信
+void sendStateToSerial() {
+  Serial.printf("STATE:%d|%d|%d|%d|%s|%d\n",
+    (int)inputMode, alphaIndex, extIndex, finalIndex,
+    sendBuf, sendCharCount);
+}
+
 void sendTypingPreview(bool force = false) {
   unsigned long now = millis();
   if (!force && (now - lastPreviewSend < PREVIEW_INTERVAL_MS)) return;
@@ -201,9 +209,9 @@ void sendTypingPreview(bool force = false) {
   txPkt.extIndex   = (uint8_t)extIndex;
   txPkt.finalIndex = (uint8_t)finalIndex;
   esp_now_send(peerAddress, (uint8_t*)&txPkt, sizeof(txPkt));
+  sendStateToSerial();
 }
 
-// 通常 typing フラグだけ送る（文字確定後など）
 void sendTypingStatus(bool isTyping) {
   txPkt.text[0]    = '\0';
   txPkt.typing     = isTyping;
@@ -212,6 +220,7 @@ void sendTypingStatus(bool isTyping) {
   txPkt.extIndex   = (uint8_t)extIndex;
   txPkt.finalIndex = (uint8_t)finalIndex;
   esp_now_send(peerAddress, (uint8_t*)&txPkt, sizeof(txPkt));
+  sendStateToSerial();
 }
 
 void appendKana(const char* kana) {
@@ -222,7 +231,7 @@ void appendKana(const char* kana) {
     sendByteLen += klen;
     sendBuf[sendByteLen] = '\0';
     sendCharCount++;
-    sendTypingStatus(true);   // 確定後も typing=true (まだ編集中)
+    sendTypingStatus(true);
   }
 }
 
@@ -249,15 +258,135 @@ void addToLog(char prefix, const char* msg) {
 }
 
 // =========================================================
+// ★ WebSerial シリアル入力処理（行単位）
+// =========================================================
+void processSerialLine(const char* line) {
+  int len = strlen(line);
+  if (len == 0) return;
+
+  // --- a〜z : alphaIndex 設定, SELECT_ALPHA へ ---
+  if (len == 1 && line[0] >= 'a' && line[0] <= 'z') {
+    alphaIndex = line[0] - 'a';
+    inputMode  = SELECT_ALPHA;
+    extIndex   = 0;
+    finalIndex = 0;
+    needRedraw = true;
+    sendTypingPreview(true);
+    Serial.println("OK");
+    return;
+  }
+
+  // --- X0〜X9 : extIndex 設定（SELECT_EXT 中にのみ有効）---
+  if (len == 2 && line[0] == 'X' && line[1] >= '0' && line[1] <= '9') {
+    if (inputMode != SELECT_EXT) { Serial.println("INVALID"); return; }
+    int idx = line[1] - '0';
+    if (idx >= extCount[alphaIndex]) { Serial.println("INVALID"); return; }
+    extIndex   = idx;
+    needRedraw = true;
+    sendTypingPreview(true);
+    Serial.println("OK");
+    return;
+  }
+
+  // --- F0〜F4 : finalIndex 設定（SELECT_FINAL 中にのみ有効）---
+  if (len == 2 && line[0] == 'F' && line[1] >= '0' && line[1] <= '4') {
+    if (inputMode != SELECT_FINAL) { Serial.println("INVALID"); return; }
+    finalIndex = line[1] - '0';
+    needRedraw = true;
+    sendTypingPreview(true);
+    Serial.println("OK");
+    return;
+  }
+
+  // --- E : Aボタン相当 ---
+  if (len == 1 && line[0] == 'E') {
+    switch (inputMode) {
+      case SELECT_ALPHA:
+        if (isVowelAlpha(alphaIndex)) {
+          appendKana(kanaTable[alphaIndex][alphaToVowelIndex(alphaIndex)]);
+          resetInput();
+        } else {
+          if (extCount[alphaIndex] == 0) { Serial.println("INVALID"); return; }
+          inputMode = SELECT_EXT;
+          extIndex  = 0;
+        }
+        break;
+      case SELECT_EXT:
+        if (extIndex >= extCount[alphaIndex]) { Serial.println("INVALID"); return; }
+        if (alphaIndex == 23) {              // 'x' → STEP3
+          inputMode  = SELECT_FINAL;
+          finalIndex = 0;
+          break;
+        }
+        if (extIndex == EXT_SMALL && kanaTable[alphaIndex][EXT_SMALL] == nullptr) {
+          Serial.println("INVALID"); return;
+        }
+        {
+          const char* kana = kanaTable[alphaIndex][extIndex];
+          if (!kana) { Serial.println("INVALID"); return; }
+          appendKana(kana);
+          resetInput();
+        }
+        break;
+      case SELECT_FINAL:
+        appendKana(smallTable[finalIndex]);
+        resetInput();
+        break;
+    }
+    sendTypingPreview(true);
+    needRedraw = true;
+    Serial.println("OK");
+    return;
+  }
+
+  // --- S : Bボタン相当（送信）---
+  if (len == 1 && line[0] == 'S') {
+    if (sendCharCount == 0) { Serial.println("INVALID"); return; }
+    sendMessage();
+    // sendMessage 内で STATE 送信済み
+    return;
+  }
+
+  // --- R : リセット ---
+  if (len == 1 && line[0] == 'R') {
+    sendBuf[0]  = '\0';
+    sendByteLen = sendCharCount = 0;
+    resetInput();
+    needRedraw = true;
+    sendTypingStatus(false);
+    Serial.println("OK");
+    return;
+  }
+
+  Serial.println("INVALID");
+}
+
+void handleSerialInput() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (serialLineLen > 0) {
+        serialLineBuf[serialLineLen] = '\0';
+        processSerialLine(serialLineBuf);
+        serialLineLen = 0;
+      }
+    } else {
+      if (serialLineLen < (int)sizeof(serialLineBuf) - 1) {
+        serialLineBuf[serialLineLen++] = c;
+      }
+    }
+  }
+}
+
+// =========================================================
 // ESP-NOW
 // =========================================================
-void onReceive(const uint8_t* mac, const uint8_t* data, int len) {
+void onReceive(const esp_now_recv_info *info, const uint8_t *data, int len) {
   if (len > (int)sizeof(rxPkt)) len = sizeof(rxPkt);
   memcpy(&rxPkt, data, len);
   rxPkt.text[MSG_BUF_SIZE - 1] = '\0';
 
   if (rxPkt.typing) {
-    // 入力中プレビュー受信: 状態を保存するだけ（描画は drawOLED で）
     peerIsTyping  = true;
     peerInputMode = rxPkt.inputMode;
     peerAlphaIdx  = rxPkt.alphaIndex;
@@ -267,6 +396,7 @@ void onReceive(const uint8_t* mac, const uint8_t* data, int len) {
     peerIsTyping = false;
     if (strlen(rxPkt.text) > 0) {
       addToLog('>', rxPkt.text);
+      Serial.printf("MSG:>%s\n", rxPkt.text);
     }
   }
   needRedraw = true;
@@ -283,42 +413,26 @@ void sendMessage() {
   txPkt.finalIndex = 0;
   addToLog('<', txPkt.text);
   esp_now_send(peerAddress, (uint8_t*)&txPkt, sizeof(txPkt));
+  Serial.printf("MSG:<%s\n", txPkt.text);
+
   sendBuf[0]  = '\0';
   sendByteLen = sendCharCount = 0;
   resetInput();
-  // typing=false を明示通知
   sendTypingStatus(false);
   needRedraw = true;
-  Serial.print("SEND: "); Serial.println(txPkt.text);
+  Serial.println("OK");
 }
 
 // =========================================================
 // OLED 描画
 // =========================================================
-/*
- * レイアウト
- * ┌──────────────────────────────┐
- * │LOG:          [HIDDEN] or空   │ y= 8
- * │ ログ行1                      │ y=20
- * │ ログ行2 or 相手プレビュー行  │ y=32
- * ├──────────────────────────────┤ y=35
- * │IN: 確定済み文字列            │ y=44
- * │n/10      [自分の選択プレビュ]│ y=63
- * └──────────────────────────────┘
- *
- * 隠しモードON & peerIsTyping の場合:
- *   y=32 行に "T> 相手プレビュー" を表示
- *   右下には追加で "[覗:X]" を小さく表示
- */
 void drawOLED() {
   u8g2.clearBuffer();
 
-  // ---- ログヘッダ ----
   u8g2.setFont(u8g2_font_5x7_tf);
   u8g2.drawStr(0, 8, "LOG:");
   if (hiddenMode) u8g2.drawStr(70, 8, "[HIDDEN]");
 
-  // ---- ログ行描画ラムダ ----
   auto drawLogLine = [](int y, const char* line) {
     char pfx[2] = {line[0], '\0'};
     u8g2.setFont(u8g2_font_5x7_tf);
@@ -334,26 +448,17 @@ void drawOLED() {
     drawLogLine(32, chatBuffer[msgCount - 1]);
   }
 
-  // ---- 隠しモード: 相手プレビュー行 (y=32 を上書き) ----
   if (hiddenMode && peerIsTyping) {
-    // 背景消去
     u8g2.setDrawColor(0);
     u8g2.drawBox(0, 22, 128, 12);
     u8g2.setDrawColor(1);
-
     const char* peerPrev = calcPreview(peerInputMode, peerAlphaIdx, peerExtIdx, peerFinalIdx);
-
     u8g2.setFont(u8g2_font_5x7_tf);
     u8g2.drawStr(0, 32, "T>");
-
-    // STEP 表示: 相手が今どのステップにいるか
     char stepStr[6];
     snprintf(stepStr, sizeof(stepStr), "[S%d]", peerInputMode + 1);
     u8g2.drawStr(14, 32, stepStr);
-
-    // プレビュー文字（カタカナ or アルファベット）
     if (peerPrev) {
-      // アルファベットなら 5x7、カタカナなら b10
       bool isAscii = (peerPrev[0] < 0x80);
       u8g2.setFont(isAscii ? u8g2_font_5x7_tf : u8g2_font_b10_t_japanese1);
       if (isAscii) u8g2.drawStr(40, 32, peerPrev);
@@ -361,10 +466,8 @@ void drawOLED() {
     }
   }
 
-  // ---- 区切り線 ----
   u8g2.drawHLine(0, 35, 128);
 
-  // ---- 入力欄 ----
   u8g2.setFont(u8g2_font_5x7_tf);
   u8g2.drawStr(0, 44, "IN:");
   if (sendByteLen > 0) {
@@ -372,13 +475,11 @@ void drawOLED() {
     u8g2.drawUTF8(18, 44, sendBuf);
   }
 
-  // ---- 文字カウンタ (左下) ----
   u8g2.setFont(u8g2_font_5x7_tf);
   char posStr[6];
   snprintf(posStr, sizeof(posStr), "%d/10", sendCharCount);
   u8g2.drawStr(0, 63, posStr);
 
-  // ---- 自分の選択プレビュー (右下 16px太字) ----
   u8g2.setFont(u8g2_font_b16_b_t_japanese1);
   char part1[10], part2[10], part3[10];
 
@@ -456,18 +557,16 @@ void updateEncoder() {
         break;
     }
     needRedraw = true;
-    // ★ エンコーダ変化のたびにプレビューを送信（スロットリング付き）
     sendTypingPreview();
   }
 }
 
 // =========================================================
-// ボタン
+// 物理ボタン
 // =========================================================
 void handleButtons() {
   unsigned long now = millis();
 
-  // ===== Aボタン =====
   if (digitalRead(BTN_A) == LOW && now - lastBtnA > DEBOUNCE_MS) {
     lastBtnA = now;
     switch (inputMode) {
@@ -481,54 +580,35 @@ void handleButtons() {
         }
         break;
       case SELECT_EXT:
-        if (alphaIndex == 23) {
-          inputMode  = SELECT_FINAL;
-          finalIndex = 0;
-          break;
-        }
-        if (extIndex == EXT_SMALL) {
-          appendKana(kanaTable[alphaIndex][EXT_SMALL]);
-          resetInput();
-          break;
-        }
-        {
-          const char* kana = kanaTable[alphaIndex][extIndex];
-          if (kana) appendKana(kana);
-          resetInput();
-        }
+        if (alphaIndex == 23) { inputMode = SELECT_FINAL; finalIndex = 0; break; }
+        if (extIndex == EXT_SMALL) { appendKana(kanaTable[alphaIndex][EXT_SMALL]); resetInput(); break; }
+        { const char* kana = kanaTable[alphaIndex][extIndex]; if (kana) appendKana(kana); resetInput(); }
         break;
       case SELECT_FINAL:
         appendKana(smallTable[finalIndex]);
         resetInput();
         break;
     }
-    // Aボタン後も現在の選択状態を即時送信
     sendTypingPreview(true);
     needRedraw = true;
   }
 
-  // ===== Bボタン =====
   if (digitalRead(BTN_B) == LOW && now - lastBtnB > DEBOUNCE_MS) {
     lastBtnB = now;
-
-    // 連打履歴シフト
     bPressHistory[0] = bPressHistory[1];
     bPressHistory[1] = bPressHistory[2];
     bPressHistory[2] = now;
 
-    // 3秒以内3回 & 文字数0 & STEP1 & 'z'選択中 → 隠しモード切替
-    // ※ alphaIndex==25(z) を必須にすることで誤爆しない隠しトリガー
     bool isHiddenTrigger = (sendCharCount == 0)
                         && (inputMode == SELECT_ALPHA)
-                        && (alphaIndex == 25); // 'z'
+                        && (alphaIndex == 25);
     if ((bPressHistory[2] - bPressHistory[0] <= HIDDEN_WINDOW_MS) && isHiddenTrigger) {
-      hiddenMode = !hiddenMode;
-      peerIsTyping = false;  // 切替時はプレビュークリア
+      hiddenMode   = !hiddenMode;
+      peerIsTyping = false;
       Serial.println(hiddenMode ? "[HIDDEN MODE ON]" : "[HIDDEN MODE OFF]");
       needRedraw = true;
-      return;  // 送信しない
+      return;
     }
-
     sendMessage();
   }
 }
@@ -552,7 +632,7 @@ void setup() {
   u8g2.setFont(u8g2_font_b10_t_japanese1);
   u8g2.drawUTF8(4, 20, "カタカナチャット");
   u8g2.setFont(u8g2_font_5x7_tf);
-  u8g2.drawStr(30, 36, "v3 - HIDDEN");
+  u8g2.drawStr(20, 36, "v3 + WebSerial");
   u8g2.drawStr(20, 50, "Initializing...");
   u8g2.sendBuffer();
   delay(800);
@@ -585,10 +665,11 @@ void setup() {
   }
 
   needRedraw = true;
-  Serial.println("[READY]");
+  Serial.println("READY");
 }
 
 void loop() {
+  handleSerialInput();   // ★ WebSerial 入力を最初に処理
   updateEncoder();
   handleButtons();
   if (needRedraw) {
